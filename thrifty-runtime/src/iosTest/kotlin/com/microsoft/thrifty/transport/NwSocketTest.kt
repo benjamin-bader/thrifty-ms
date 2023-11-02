@@ -25,6 +25,7 @@ import com.microsoft.thrifty.protocol.Xtruct
 import io.kotest.matchers.shouldBe
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.convert
+import kotlinx.coroutines.runBlocking
 import okio.use
 import platform.Network.nw_connection_set_queue
 import platform.Network.nw_connection_set_state_changed_handler
@@ -93,7 +94,7 @@ class NwSocketTest {
                 if (state == nw_connection_state_ready) {
                     val transport = SocketTransport(connection)
                     val protocol = BinaryProtocol(transport)
-                    xtruct.write(protocol)
+                    runBlocking { xtruct.write(protocol) }
                 } else if (state in listOf(
                         nw_connection_state_failed,
                         nw_connection_state_cancelled
@@ -139,14 +140,16 @@ class NwSocketTest {
                 val port = nw_listener_get_port(serverListener)
                 SocketTransport.Builder("127.0.0.1", port.toInt()).readTimeout(5000).build()
                     .use { transport ->
-                        transport.connect()
-                        val protocol = BinaryProtocol(transport)
-                        val readXtruct = Xtruct.ADAPTER.read(protocol)
+                        runBlocking {
+                            transport.connect()
+                            val protocol = BinaryProtocol(transport)
+                            val readXtruct = Xtruct.ADAPTER.read(protocol)
 
-                        if (readXtruct == xtruct) {
-                            // Assertion errors don't make it out of dispatch queues,
-                            // so we'll just set a flag and check it later.
-                            matched = true
+                            if (readXtruct == xtruct) {
+                                // Assertion errors don't make it out of dispatch queues,
+                                // so we'll just set a flag and check it later.
+                                matched = true
+                            }
                         }
                     }
             } finally {

@@ -27,7 +27,6 @@ plugins {
 
 dependencies {
     implementation project(':thrifty-schema')
-    implementation project(':thrifty-java-codegen')
     implementation project(':thrifty-kotlin-codegen')
     implementation project(':thrifty-compiler-plugins')
 

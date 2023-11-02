@@ -111,21 +111,13 @@ abstract class CoroutineConformanceTests {
 
             this.transport = decorateTransport(transport)
             this.protocol = createProtocol(this.transport)
-            this.client = ThriftTestClient(protocol, object : AsyncClientBase.Listener {
-                    override fun onTransportClosed() {
-
-                    }
-
-                    override fun onError(error: Throwable) {
-                        throw AssertionError(error)
-                    }
-                })
+            this.client = ThriftTestClient(protocol)
         }
 
-        private fun getTransportImpl(): Transport {
-           return when(testServer.transport) {
+        private fun getTransportImpl(): Transport = runBlocking {
+           when(testServer.transport) {
                ServerTransport.BLOCKING, ServerTransport.NON_BLOCKING ->
-                   return SocketTransport.Builder("localhost", testServer.port())
+                   SocketTransport.Builder("localhost", testServer.port())
                        .readTimeout(2000)
                        .build()
                        .apply { connect() }

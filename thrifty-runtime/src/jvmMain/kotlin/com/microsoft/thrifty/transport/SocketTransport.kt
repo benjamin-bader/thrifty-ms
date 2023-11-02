@@ -97,23 +97,19 @@ actual class SocketTransport actual constructor(
             return s != null && s.isConnected && !s.isClosed
         }
 
-    @Throws(IOException::class)
-    override fun read(buffer: ByteArray, offset: Int, count: Int): Int {
+    override suspend fun read(buffer: ByteArray, offset: Int, count: Int): Int {
         return inputStream!!.read(buffer, offset, count)
     }
 
-    @Throws(IOException::class)
-    override fun write(buffer: ByteArray, offset: Int, count: Int) {
+    override suspend fun write(buffer: ByteArray, offset: Int, count: Int) {
         outputStream!!.write(buffer, offset, count)
     }
 
-    @Throws(IOException::class)
-    override fun flush() {
+    override suspend fun flush() {
         outputStream!!.flush()
     }
 
-    @Throws(IOException::class)
-    actual fun connect() {
+    actual suspend fun connect() {
         if (socket == null) {
             socket = socketFactory.createSocket()
         }

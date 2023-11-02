@@ -49,15 +49,7 @@ class HttpTransportTest {
     fun testHttpTransport() = runBlocking {
         val transport = HttpTransport("http://localhost:$port/test/service")
         val protocol = BinaryProtocol(transport)
-        val client = ThriftTestClient(protocol, object : AsyncClientBase.Listener {
-            override fun onTransportClosed() {
-                println("transport closed")
-            }
-
-            override fun onError(error: Throwable) {
-                fail("error: $error")
-            }
-        })
+        val client = ThriftTestClient(protocol)
 
         val insanity = Insanity.Builder()
             .build()

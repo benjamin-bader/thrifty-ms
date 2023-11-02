@@ -21,13 +21,13 @@
 package com.microsoft.thrifty.compiler;
 
 import com.microsoft.thrifty.compiler.spi.KotlinTypeProcessor;
-import com.microsoft.thrifty.compiler.spi.TypeProcessor;
+//import com.microsoft.thrifty.compiler.spi.TypeProcessor;
 
 import java.util.Iterator;
 import java.util.ServiceLoader;
 
 /**
- * An object that locate {@link TypeProcessor} and {@link KotlinTypeProcessor}
+ * An object that locates @link KotlinTypeProcessor}
  * objects from the current classpath.
  *
  * Used by the compiler to detect and run user-provided processors.
@@ -43,21 +43,7 @@ public final class TypeProcessorService {
         return instance;
     }
 
-    private ServiceLoader<TypeProcessor> serviceLoader = ServiceLoader.load(TypeProcessor.class);
     private ServiceLoader<KotlinTypeProcessor> kotlinProcessorLoader = ServiceLoader.load(KotlinTypeProcessor.class);
-
-    /**
-     * Gets the first {@link TypeProcessor} implementation loaded, or
-     * {@code null} if none are found.
-     *
-     * Because service ordering is non-deterministic, only the first instance
-     * is returned.  A warning will be printed if more than one are found.
-     *
-     * @return The first located {@link TypeProcessor}, or {@code null}.
-     */
-    public TypeProcessor getJavaProcessor() {
-        return loadSingleProcessor(serviceLoader.iterator());
-    }
 
     /**
      * Gets the first {@link KotlinTypeProcessor} implementation loaded, or

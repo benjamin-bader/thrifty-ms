@@ -41,11 +41,11 @@
 package com.microsoft.thrifty.transport
 
 
-import com.microsoft.thrifty.internal.ProtocolException
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import okio.ProtocolException
 
 /**
  * HTTP implementation of the TTransport interface. Used for working with a
@@ -73,15 +73,15 @@ actual open class HttpTransport actual constructor(url: String) : Transport {
     private val sendBuffer = ByteArrayOutputStream()
 
     private inner class Writing : Transport {
-        override fun read(buffer: ByteArray, offset: Int, count: Int): Int {
+        override suspend fun read(buffer: ByteArray, offset: Int, count: Int): Int {
             throw ProtocolException("Currently in writing state")
         }
 
-        override fun write(buffer: ByteArray, offset: Int, count: Int) {
+        override suspend fun write(buffer: ByteArray, offset: Int, count: Int) {
             sendBuffer.write(buffer, offset, count)
         }
 
-        override fun flush() {
+        override suspend fun flush() {
             val bytesToSend = sendBuffer.toByteArray()
             sendBuffer.reset()
             send(bytesToSend)
@@ -93,7 +93,7 @@ actual open class HttpTransport actual constructor(url: String) : Transport {
     }
 
     private inner class Reading(val inputStream: InputStream) : Transport {
-        override fun read(buffer: ByteArray, offset: Int, count: Int): Int {
+        override suspend fun read(buffer: ByteArray, offset: Int, count: Int): Int {
             val ret = inputStream.read(buffer, offset, count)
             if (ret == -1) {
                 throw ProtocolException("No more data available.")
@@ -101,11 +101,11 @@ actual open class HttpTransport actual constructor(url: String) : Transport {
             return ret
         }
 
-        override fun write(buffer: ByteArray, offset: Int, count: Int) {
+        override suspend fun write(buffer: ByteArray, offset: Int, count: Int) {
             throw ProtocolException("currently in reading state")
         }
 
-        override fun flush() {
+        override suspend fun flush() {
             throw ProtocolException("currently in reading state")
         }
 
@@ -167,9 +167,9 @@ actual open class HttpTransport actual constructor(url: String) : Transport {
         currentState.close()
     }
 
-    override fun read(buffer: ByteArray, offset: Int, count: Int): Int = currentState.read(buffer, offset, count)
+    override suspend fun read(buffer: ByteArray, offset: Int, count: Int): Int = currentState.read(buffer, offset, count)
 
-    override fun write(buffer: ByteArray, offset: Int, count: Int) {
+    override suspend fun write(buffer: ByteArray, offset: Int, count: Int) {
         // this mirrors the original behaviour, though it is not very elegant.
         // we don't know when the user is done reading, so when they start writing again,
         // we just go with it.
@@ -180,7 +180,7 @@ actual open class HttpTransport actual constructor(url: String) : Transport {
         currentState.write(buffer, offset, count)
     }
 
-    override fun flush() {
+    override suspend fun flush() {
         currentState.flush()
     }
 }

@@ -37,8 +37,7 @@ interface Adapter<T, B : StructBuilder<T>> {
      * @return an instance of [T] populated with the data just read.
      * @throws IOException if reading fails, or if the struct is malformed.
      */
-    @Throws(IOException::class)
-    fun read(protocol: Protocol): T
+    suspend fun read(protocol: Protocol): T
 
     /**
      * Reads a new instane of [T] from the given `protocol`, using
@@ -49,8 +48,7 @@ interface Adapter<T, B : StructBuilder<T>> {
      * @return an instance of [T] populated with the data just read.
      * @throws IOException if reading fails, or if the struct is malformed.
      */
-    @Throws(IOException::class)
-    fun read(protocol: Protocol, builder: B): T
+    suspend fun read(protocol: Protocol, builder: B): T
 
     /**
      * Writes the given `struct` to the given `protocol`.
@@ -59,6 +57,5 @@ interface Adapter<T, B : StructBuilder<T>> {
      * @param struct the struct to be written
      * @throws IOException if writing fails
      */
-    @Throws(IOException::class)
-    fun write(protocol: Protocol, struct: T)
+    suspend fun write(protocol: Protocol, struct: T)
 }

@@ -52,8 +52,8 @@ public class PluginTest {
     @ParameterizedTest
     @ValueSource(strings = {
             "kotlin_integration_project",
-            "java_project_kotlin_thrifts",
-            "java_project_java_thrifts",
+//            "java_project_kotlin_thrifts",
+//            "java_project_java_thrifts",
             "kotlin_project_kotlin_thrifts",
             "kotlin_project_java_thrifts",
             "kotlin_project_filtered_thrifts",

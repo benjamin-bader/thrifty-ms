@@ -271,7 +271,7 @@ class KotlinCodeGeneratorTest {
             }
         """.trimIndent()
 
-        val specs = generate(thrift)
+        val specs = generate(thrift) { coroutineServiceClients() }
         specs.shouldCompile()
     }
 
@@ -292,7 +292,9 @@ class KotlinCodeGeneratorTest {
         val specs = generate(thrift) {
             generateServer()
             withDataClassBuilders()
+            coroutineServiceClients()
         }
+        println(specs)
         specs.shouldCompile()
     }
 
@@ -323,14 +325,13 @@ class KotlinCodeGeneratorTest {
             }
         """.trimIndent()
 
-        val file = generate(thrift).single()
+        val file = generate(thrift) { coroutineServiceClients() }.single()
+        println(file)
         file.shouldCompile()
         val svc = file.members.first { it is TypeSpec && it.name == "Foo" } as TypeSpec
         val method = svc.funSpecs.single()
         method.name shouldBe "doIt"
-        method.parameters.single().type shouldBe ServiceMethodCallback::class
-                .asTypeName()
-                .parameterizedBy(ClassName("test.typedefs", "TheNumber"))
+        method.returnType shouldBe ClassName("test.typedefs", "TheNumber")
     }
 
     @Test
@@ -434,19 +435,9 @@ class KotlinCodeGeneratorTest {
             |
             |public class SvcClient(
             |  protocol: Protocol,
-            |  listener: AsyncClientBase.Listener,
-            |) : AsyncClientBase(protocol, listener), Svc {
-            |  public override suspend fun doSomething(foo: Int): Int = suspendCoroutine { cont ->
-            |    this.enqueue(DoSomethingCall(foo, object : ServiceMethodCallback<Int> {
-            |      public override fun onSuccess(result: Int): Unit {
-            |        cont.resumeWith(Result.success(result))
-            |      }
-            |
-            |      public override fun onError(error: Throwable): Unit {
-            |        cont.resumeWith(Result.failure(error))
-            |      }
-            |    }))
-            |  }
+            |  dispatcher: CoroutineDispatcher = Dispatchers.Default,
+            |) : AsyncClientBase(protocol, dispatcher), Svc {
+            |  public override suspend fun doSomething(foo: Int): Int = this.enqueue(DoSomethingCall(foo)) as Int
             |
         """.trimMargin())
     }
@@ -702,9 +693,9 @@ class KotlinCodeGeneratorTest {
         file.shouldCompile()
 
         file.single().toString() should contain("""
-            |    public override fun read(protocol: Protocol) = read(protocol, Builder())
+            |    public override suspend fun read(protocol: Protocol) = read(protocol, Builder())
             |
-            |    public override fun read(protocol: Protocol, builder: Builder): Union {
+            |    public override suspend fun read(protocol: Protocol, builder: Builder): Union {
             |      protocol.readStructBegin()
             |      while (true) {
             |        val fieldMeta = protocol.readFieldBegin()
@@ -771,7 +762,7 @@ class KotlinCodeGeneratorTest {
         file.shouldCompile()
 
         file.single().toString() should contain("""
-            |    public override fun read(protocol: Protocol): Union {
+            |    public override suspend fun read(protocol: Protocol): Union {
             |      protocol.readStructBegin()
             |      var result : Union? = null
             |      while (true) {
@@ -901,7 +892,7 @@ class KotlinCodeGeneratorTest {
 
         file.single().toString() should contain("""
             |public sealed class UnionStruct : Struct {
-            |  public override fun write(protocol: Protocol): Unit {
+            |  public override suspend fun write(protocol: Protocol): Unit {
             |    ADAPTER.write(protocol, this)
             |  }
             |
@@ -1197,24 +1188,6 @@ class KotlinCodeGeneratorTest {
 
             kt shouldNotContain "import java.Exception"
             kt shouldNotContain "import java.io.IOException"
-        }
-    }
-
-    @Test
-    fun `uses default Throws instead of jvm Throws`() {
-        val thrift = """
-            |namespace kt test.throws
-            |
-            |service Frobbler {
-            |  void frobble(1: string bizzle);
-            |}
-        """.trimMargin()
-
-        for (file in generate(thrift)) {
-            val kt = file.toString()
-
-            kt shouldContain "@Throws"
-            kt shouldNotContain "import kotlin.jvm.Throws"
         }
     }
 

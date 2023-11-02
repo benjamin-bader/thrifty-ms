@@ -69,22 +69,22 @@ actual class SocketTransport actual constructor(
         }
     }
 
-    override fun read(buffer: ByteArray, offset: Int, count: Int): Int {
+    override suspend fun read(buffer: ByteArray, offset: Int, count: Int): Int {
         return socket!!.read(buffer, offset, count)
     }
 
-    override fun write(data: ByteArray) {
+    override suspend fun write(data: ByteArray) {
         write(data, 0, data.size)
     }
 
-    override fun write(buffer: ByteArray, offset: Int, count: Int) {
+    override suspend fun write(buffer: ByteArray, offset: Int, count: Int) {
         require(offset >= 0)
         require(count >= 0)
         require(count <= buffer.size - offset)
         socket!!.write(buffer, offset, count)
     }
 
-    override fun flush() {
+    override suspend fun flush() {
         // no-op?
         socket?.flush()
     }
@@ -93,8 +93,7 @@ actual class SocketTransport actual constructor(
         socket?.close()
     }
 
-    @Throws(IOException::class)
-    actual fun connect() {
+    actual suspend fun connect() {
         socket = NwSocket.connect(
             host = host,
             port = port,

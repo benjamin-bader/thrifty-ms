@@ -20,12 +20,15 @@
  */
 package com.microsoft.thrifty
 
+import com.microsoft.thrifty.kotlin.Adapter
 import com.microsoft.thrifty.protocol.BinaryProtocol
 import com.microsoft.thrifty.protocol.CompactProtocol
 import com.microsoft.thrifty.protocol.JsonProtocol
+import com.microsoft.thrifty.protocol.Protocol
 import com.microsoft.thrifty.protocol.SimpleJsonProtocol
 import com.microsoft.thrifty.transport.BufferTransport
 import com.microsoft.thrifty.transport.Transport
+import kotlinx.coroutines.runBlocking
 import okio.Buffer
 import okio.BufferedSink
 import okio.BufferedSource
@@ -49,13 +52,13 @@ fun <S : BufferedSource> S.transport() = object : Transport {
 
     override fun close() = self.close()
 
-    override fun read(buffer: ByteArray, offset: Int, count: Int) = self.read(buffer, offset, count)
+    override suspend fun read(buffer: ByteArray, offset: Int, count: Int) = self.read(buffer, offset, count)
 
-    override fun write(data: ByteArray) = error("read-only transport")
+    override suspend fun write(data: ByteArray) = error("read-only transport")
 
-    override fun write(buffer: ByteArray, offset: Int, count: Int) = error("read-only transport")
+    override suspend fun write(buffer: ByteArray, offset: Int, count: Int) = error("read-only transport")
 
-    override fun flush() {
+    override suspend fun flush() {
         // No-op
     }
 }
@@ -71,15 +74,15 @@ fun <S : BufferedSink> S.transport() = object : Transport {
 
     override fun close() = self.close()
 
-    override fun read(buffer: ByteArray, offset: Int, count: Int) = error("write-only transport")
+    override suspend fun read(buffer: ByteArray, offset: Int, count: Int) = error("write-only transport")
 
-    override fun write(data: ByteArray) { self.write(data) }
+    override suspend fun write(data: ByteArray) { self.write(data) }
 
-    override fun write(buffer: ByteArray, offset: Int, count: Int) {
+    override suspend fun write(buffer: ByteArray, offset: Int, count: Int) {
         self.write(buffer, offset, count)
     }
 
-    override fun flush() = self.flush()
+    override suspend fun flush() = self.flush()
 }
 
 /**
@@ -101,3 +104,12 @@ fun <T : Transport> T.jsonProtocol() = JsonProtocol(this)
  * Creates a [SimpleJsonProtocol] from the given [Transport].
  */
 fun <T : Transport> T.simpleJsonProtocol() = SimpleJsonProtocol(this)
+
+fun <T> Adapter<T>.blocking(): BlockingAdapter<T> = BlockingAdapter(this)
+
+class BlockingAdapter<T>(
+    private val delegate: Adapter<T>
+) {
+    fun read(protocol: Protocol) = runBlocking { delegate.read(protocol) }
+    fun write(protocol: Protocol, value: T) = runBlocking { delegate.write(protocol, value) }
+}

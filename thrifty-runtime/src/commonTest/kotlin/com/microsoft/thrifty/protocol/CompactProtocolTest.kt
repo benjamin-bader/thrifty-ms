@@ -21,16 +21,15 @@
 package com.microsoft.thrifty.protocol
 
 import com.microsoft.thrifty.transport.BufferTransport
+import io.kotest.common.runBlocking
 import io.kotest.matchers.shouldBe
 import okio.Buffer
-import okio.IOException
 import kotlin.math.PI
 import kotlin.test.Test
 
 class CompactProtocolTest {
     @Test
-    @Throws(IOException::class)
-    fun varint32() {
+    fun varint32() = runBlocking {
         val buffer = Buffer()
         val transport = BufferTransport(buffer)
         val protocol = CompactProtocol(transport)
@@ -76,8 +75,7 @@ class CompactProtocolTest {
     }
 
     @Test
-    @Throws(Exception::class)
-    fun roundtrip() {
+    fun roundtrip() = runBlocking {
         val xtruct = Xtruct.Builder()
                 .byte_thing(254.toByte())
                 .i32_thing(0xFFFF)

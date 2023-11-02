@@ -20,11 +20,11 @@
  */
 package com.microsoft.thrifty.protocol
 
-import com.microsoft.thrifty.internal.ProtocolException
 import com.microsoft.thrifty.transport.Transport
 import okio.Buffer
 import okio.ByteString
 import okio.IOException
+import okio.ProtocolException
 
 /**
  * A protocol that maps Thrift data to idiomatic JSON.
@@ -61,8 +61,7 @@ class SimpleJsonProtocol(transport: Transport?) : BaseProtocol(transport!!) {
     }
 
     private open class WriteContext {
-        @Throws(IOException::class)
-        open fun beforeWrite() {
+        open suspend fun beforeWrite() {
         }
 
         @Throws(IOException::class)
@@ -73,8 +72,7 @@ class SimpleJsonProtocol(transport: Transport?) : BaseProtocol(transport!!) {
 
     private inner class ListWriteContext : WriteContext() {
         private var hasWritten = false
-        @Throws(IOException::class)
-        override fun beforeWrite() {
+        override suspend fun beforeWrite() {
             if (hasWritten) {
                 transport.write(COMMA)
             } else {
@@ -86,8 +84,7 @@ class SimpleJsonProtocol(transport: Transport?) : BaseProtocol(transport!!) {
     private inner class MapWriteContext : WriteContext() {
         private var hasWritten = false
         private var mode = MODE_KEY
-        @Throws(IOException::class)
-        override fun beforeWrite() {
+        override suspend fun beforeWrite() {
             if (hasWritten) {
                 if (mode == MODE_KEY) {
                     transport.write(COMMA)
@@ -100,7 +97,6 @@ class SimpleJsonProtocol(transport: Transport?) : BaseProtocol(transport!!) {
             mode = !mode
         }
 
-        @Throws(IOException::class)
         override fun onPop() {
             if (mode == MODE_VALUE) {
                 throw ProtocolException("Incomplete JSON map, expected a value")
@@ -145,8 +141,7 @@ class SimpleJsonProtocol(transport: Transport?) : BaseProtocol(transport!!) {
     }
 
     private val defaultWriteContext: WriteContext = object : WriteContext() {
-        @Throws(IOException::class)
-        override fun beforeWrite() {
+        override suspend fun beforeWrite() {
             // nothing
         }
     }
@@ -157,21 +152,18 @@ class SimpleJsonProtocol(transport: Transport?) : BaseProtocol(transport!!) {
         return this
     }
 
-    @Throws(IOException::class)
-    override fun writeMessageBegin(name: String, typeId: Byte, seqId: Int) {
+    override suspend fun writeMessageBegin(name: String, typeId: Byte, seqId: Int) {
         writeMapBegin(typeId, typeId, 0) // values are ignored here
         writeString("name")
         writeString(name)
         writeString("value")
     }
 
-    @Throws(IOException::class)
-    override fun writeMessageEnd() {
+    override suspend fun writeMessageEnd() {
         writeMapEnd()
     }
 
-    @Throws(IOException::class)
-    override fun writeStructBegin(structName: String) {
+    override suspend fun writeStructBegin(structName: String) {
         writeContext().beforeWrite()
         pushWriteContext(MapWriteContext())
         transport.write(LBRACE)
@@ -179,104 +171,87 @@ class SimpleJsonProtocol(transport: Transport?) : BaseProtocol(transport!!) {
         writeString(structName)
     }
 
-    @Throws(IOException::class)
-    override fun writeStructEnd() {
+    override suspend fun writeStructEnd() {
         transport.write(RBRACE)
         popWriteContext()
     }
 
-    @Throws(IOException::class)
-    override fun writeFieldBegin(fieldName: String, fieldId: Int, typeId: Byte) {
+    override suspend fun writeFieldBegin(fieldName: String, fieldId: Int, typeId: Byte) {
         // TODO: assert that we're in map context
         writeString(fieldName)
     }
 
-    @Throws(IOException::class)
-    override fun writeFieldEnd() {
+    override suspend fun writeFieldEnd() {
     }
 
-    @Throws(IOException::class)
-    override fun writeFieldStop() {
+    override suspend fun writeFieldStop() {
     }
 
-    @Throws(IOException::class)
-    override fun writeMapBegin(keyTypeId: Byte, valueTypeId: Byte, mapSize: Int) {
+    override suspend fun writeMapBegin(keyTypeId: Byte, valueTypeId: Byte, mapSize: Int) {
         writeContext().beforeWrite()
         pushWriteContext(MapWriteContext())
         transport.write(LBRACE)
     }
 
-    @Throws(IOException::class)
-    override fun writeMapEnd() {
+    override suspend fun writeMapEnd() {
         transport.write(RBRACE)
         popWriteContext()
     }
 
-    @Throws(IOException::class)
-    override fun writeListBegin(elementTypeId: Byte, listSize: Int) {
+    override suspend fun writeListBegin(elementTypeId: Byte, listSize: Int) {
         writeContext().beforeWrite()
         pushWriteContext(ListWriteContext())
         transport.write(LBRACKET)
     }
 
-    @Throws(IOException::class)
-    override fun writeListEnd() {
+    override suspend fun writeListEnd() {
         transport.write(RBRACKET)
         popWriteContext()
     }
 
-    @Throws(IOException::class)
-    override fun writeSetBegin(elementTypeId: Byte, setSize: Int) {
+    override suspend fun writeSetBegin(elementTypeId: Byte, setSize: Int) {
         writeContext().beforeWrite()
         pushWriteContext(ListWriteContext())
         transport.write(LBRACKET)
     }
 
-    @Throws(IOException::class)
-    override fun writeSetEnd() {
+    override suspend fun writeSetEnd() {
         transport.write(RBRACKET)
         popWriteContext()
     }
 
-    @Throws(IOException::class)
-    override fun writeBool(b: Boolean) {
+    override suspend fun writeBool(b: Boolean) {
         writeContext().beforeWrite()
         transport.write(if (b) TRUE else FALSE)
     }
 
-    @Throws(IOException::class)
-    override fun writeByte(b: Byte) {
+    override suspend fun writeByte(b: Byte) {
         writeContext().beforeWrite()
         val toWrite = b.toString().encodeToByteArray()
         transport.write(toWrite)
     }
 
-    @Throws(IOException::class)
-    override fun writeI16(i16: Short) {
+    override suspend fun writeI16(i16: Short) {
         writeContext().beforeWrite()
         transport.write(i16.toString().encodeToByteArray())
     }
 
-    @Throws(IOException::class)
-    override fun writeI32(i32: Int) {
+    override suspend fun writeI32(i32: Int) {
         writeContext().beforeWrite()
         transport.write(i32.toString().encodeToByteArray())
     }
 
-    @Throws(IOException::class)
-    override fun writeI64(i64: Long) {
+    override suspend fun writeI64(i64: Long) {
         writeContext().beforeWrite()
         transport.write(i64.toString().encodeToByteArray())
     }
 
-    @Throws(IOException::class)
-    override fun writeDouble(dub: Double) {
+    override suspend fun writeDouble(dub: Double) {
         writeContext().beforeWrite()
         transport.write(dub.toString().encodeToByteArray())
     }
 
-    @Throws(IOException::class)
-    override fun writeString(str: String) {
+    override suspend fun writeString(str: String) {
         writeContext().beforeWrite()
         val len = str.length
         val buffer = Buffer()
@@ -299,8 +274,7 @@ class SimpleJsonProtocol(transport: Transport?) : BaseProtocol(transport!!) {
         transport.write(bs, 0, bs.size)
     }
 
-    @Throws(IOException::class)
-    override fun writeBinary(buf: ByteString) {
+    override suspend fun writeBinary(buf: ByteString) {
         val out = when (binaryOutputMode) {
             BinaryOutputMode.HEX -> buf.hex()
             BinaryOutputMode.BASE_64 -> buf.base64()
@@ -331,103 +305,83 @@ class SimpleJsonProtocol(transport: Transport?) : BaseProtocol(transport!!) {
         }
     }
 
-    @Throws(IOException::class)
-    override fun readMessageBegin(): MessageMetadata {
+    override suspend fun readMessageBegin(): MessageMetadata {
         throw UnsupportedOperationException()
     }
 
-    @Throws(IOException::class)
-    override fun readMessageEnd() {
+    override suspend fun readMessageEnd() {
         throw UnsupportedOperationException()
     }
 
-    @Throws(IOException::class)
-    override fun readStructBegin(): StructMetadata {
+    override suspend fun readStructBegin(): StructMetadata {
         throw UnsupportedOperationException()
     }
 
-    @Throws(IOException::class)
-    override fun readStructEnd() {
+    override suspend fun readStructEnd() {
         throw UnsupportedOperationException()
     }
 
-    @Throws(IOException::class)
-    override fun readFieldBegin(): FieldMetadata {
+    override suspend fun readFieldBegin(): FieldMetadata {
         throw UnsupportedOperationException()
     }
 
-    @Throws(IOException::class)
-    override fun readFieldEnd() {
+    override suspend fun readFieldEnd() {
         throw UnsupportedOperationException()
     }
 
-    @Throws(IOException::class)
-    override fun readMapBegin(): MapMetadata {
+    override suspend fun readMapBegin(): MapMetadata {
         throw UnsupportedOperationException()
     }
 
-    @Throws(IOException::class)
-    override fun readMapEnd() {
+    override suspend fun readMapEnd() {
         throw UnsupportedOperationException()
     }
 
-    @Throws(IOException::class)
-    override fun readListBegin(): ListMetadata {
+    override suspend fun readListBegin(): ListMetadata {
         throw UnsupportedOperationException()
     }
 
-    @Throws(IOException::class)
-    override fun readListEnd() {
+    override suspend fun readListEnd() {
         throw UnsupportedOperationException()
     }
 
-    @Throws(IOException::class)
-    override fun readSetBegin(): SetMetadata {
+    override suspend fun readSetBegin(): SetMetadata {
         throw UnsupportedOperationException()
     }
 
-    @Throws(IOException::class)
-    override fun readSetEnd() {
+    override suspend fun readSetEnd() {
         throw UnsupportedOperationException()
     }
 
-    @Throws(IOException::class)
-    override fun readBool(): Boolean {
+    override suspend fun readBool(): Boolean {
         throw UnsupportedOperationException()
     }
 
-    @Throws(IOException::class)
-    override fun readByte(): Byte {
+    override suspend fun readByte(): Byte {
         throw UnsupportedOperationException()
     }
 
-    @Throws(IOException::class)
-    override fun readI16(): Short {
+    override suspend fun readI16(): Short {
         throw UnsupportedOperationException()
     }
 
-    @Throws(IOException::class)
-    override fun readI32(): Int {
+    override suspend fun readI32(): Int {
         throw UnsupportedOperationException()
     }
 
-    @Throws(IOException::class)
-    override fun readI64(): Long {
+    override suspend fun readI64(): Long {
         throw UnsupportedOperationException()
     }
 
-    @Throws(IOException::class)
-    override fun readDouble(): Double {
+    override suspend fun readDouble(): Double {
         throw UnsupportedOperationException()
     }
 
-    @Throws(IOException::class)
-    override fun readString(): String {
+    override suspend fun readString(): String {
         throw UnsupportedOperationException()
     }
 
-    @Throws(IOException::class)
-    override fun readBinary(): ByteString {
+    override suspend fun readBinary(): ByteString {
         throw UnsupportedOperationException()
     }
 }

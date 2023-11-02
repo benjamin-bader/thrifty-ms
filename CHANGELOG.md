@@ -1,3 +1,9 @@
+Unreleased
+------------------
+BREAK: Remove Java support!
+BREAK: Protocol and Transport are suspend-only!
+BREAK: Remove Java-specific TypeProcessor!
+
 3.1.0 (released 13 December 2022)
 ------------------
 - Add: Support default field values in struct-typed constants (#507)

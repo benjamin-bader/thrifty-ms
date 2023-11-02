@@ -21,6 +21,7 @@
 package com.microsoft.thrifty.transport
 
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.common.runBlocking
 import io.kotest.matchers.shouldBe
 import okio.Buffer
 import okio.EOFException
@@ -28,7 +29,7 @@ import kotlin.test.Test
 
 class FramedTransportTest {
     @Test
-    fun sinkWritesFrameLength() {
+    fun sinkWritesFrameLength(): Unit = runBlocking {
         val buffer = Buffer()
         val bufferTransport = BufferTransport(buffer)
         val transport = FramedTransport(bufferTransport)
@@ -40,7 +41,7 @@ class FramedTransportTest {
     }
 
     @Test
-    fun sourceReadsFrameLength() {
+    fun sourceReadsFrameLength(): Unit = runBlocking {
         val buffer = Buffer()
         buffer.writeInt(5)
         buffer.writeUtf8("abcdefghij") // buffer.size() is now 14
@@ -53,7 +54,7 @@ class FramedTransportTest {
     }
 
     @Test
-    fun flushedDataBeginsWithFrameLength() {
+    fun flushedDataBeginsWithFrameLength(): Unit = runBlocking {
         val target = Buffer()
         val source = Buffer()
         val transport = FramedTransport(BufferTransport(target))
@@ -67,7 +68,7 @@ class FramedTransportTest {
     }
 
     @Test
-    fun readsSpanningMultipleFrames() {
+    fun readsSpanningMultipleFrames(): Unit = runBlocking {
         val buffer = Buffer()
         buffer.writeInt(6)
         buffer.writeUtf8("abcdef")
@@ -82,7 +83,7 @@ class FramedTransportTest {
     }
 
     @Test
-    fun readHeaderWhenEOFReached() {
+    fun readHeaderWhenEOFReached(): Unit = runBlocking {
         val buffer = Buffer()
         val transport = FramedTransport(BufferTransport(buffer))
         val readBuffer = ByteArray(10)

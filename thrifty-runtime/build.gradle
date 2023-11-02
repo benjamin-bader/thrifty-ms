@@ -51,7 +51,6 @@ def compileTestThrift = tasks.register("compileTestThrift", JavaExec) { t ->
     args = [
             "--out=$projectDir/build/generated-src/thrifty-kotlin/kotlin",
             "--kt-struct-builders",
-            "--service-type=coroutine",
             "$projectDir/ClientThriftTest.thrift"
     ]
 }
@@ -101,8 +100,9 @@ kotlin {
         commonMain {
             dependencies {
                 api libs.kotlin.stdlibCommon
-                api libs.okio
+                api libs.kotlinx.atomicfu.common
                 api libs.kotlinx.coroutines
+                api libs.okio
             }
         }
 

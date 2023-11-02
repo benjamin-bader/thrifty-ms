@@ -74,7 +74,7 @@ actual class HttpTransport actual constructor(url: String) : Transport {
         }
     }
 
-    override fun read(buffer: ByteArray, offset: Int, count: Int): Int {
+    override suspend fun read(buffer: ByteArray, offset: Int, count: Int): Int {
         require(!writing) { "Cannot read before calling flush()" }
         require(count > 0) { "Cannot read a negative or zero number of bytes" }
         require(offset >= 0) { "Cannot read into a negative offset" }
@@ -102,7 +102,7 @@ actual class HttpTransport actual constructor(url: String) : Transport {
         return toCopy.convert()
     }
 
-    override fun write(buffer: ByteArray, offset: Int, count: Int) {
+    override suspend fun write(buffer: ByteArray, offset: Int, count: Int) {
         require(offset >= 0) { "offset < 0: $offset" }
         require(count >= 0) { "count < 0: $count" }
         require(offset + count <= buffer.size) { "offset + count > buffer.size: $offset + $count > ${buffer.size}" }
@@ -129,7 +129,7 @@ actual class HttpTransport actual constructor(url: String) : Transport {
         }
     }
 
-    override fun flush() {
+    override suspend fun flush() {
         require(writing) { "Cannot flush after calling read()" }
         writing = false
 

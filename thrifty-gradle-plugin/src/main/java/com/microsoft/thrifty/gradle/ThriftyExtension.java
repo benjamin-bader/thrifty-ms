@@ -160,9 +160,9 @@ public abstract class ThriftyExtension {
         thriftOptions.set(opts);
     }
 
-    public void java(Action<JavaThriftOptions> action) {
-        JavaThriftOptions opts = objects.newInstance(JavaThriftOptions.class);
-        action.execute(opts);
-        thriftOptions.set(opts);
-    }
+//    public void java(Action<JavaThriftOptions> action) {
+//        JavaThriftOptions opts = objects.newInstance(JavaThriftOptions.class);
+//        action.execute(opts);
+//        thriftOptions.set(opts);
+//    }
 }

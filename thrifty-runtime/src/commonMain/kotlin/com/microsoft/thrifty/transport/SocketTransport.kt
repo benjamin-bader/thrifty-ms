@@ -42,6 +42,5 @@ expect class SocketTransport internal constructor(
         fun build(): SocketTransport
     }
 
-    @Throws(okio.IOException::class)
-    fun connect()
+    suspend fun connect()
 }

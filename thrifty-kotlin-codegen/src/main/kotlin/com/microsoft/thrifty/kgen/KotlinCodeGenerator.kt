@@ -118,13 +118,11 @@ private object Tags {
 private object ClassNames {
     val EXCEPTION = ClassName("kotlin", "Exception")
     val ILLEGAL_ARGUMENT_EXCEPTION = ClassName("kotlin", "IllegalArgumentException")
-    val THROWABLE = ClassName("kotlin", "Throwable")
-    val RESULT = ClassName("kotlin", "Result")
-    val THROWS = ClassName("kotlin", "Throws")
     val ARRAY_LIST = ClassName("kotlin.collections", "ArrayList")
     val LINKED_HASH_SET = ClassName("kotlin.collections", "LinkedHashSet")
     val LINKED_HASH_MAP = ClassName("kotlin.collections", "LinkedHashMap")
-    val IO_EXCEPTION = ClassName("okio", "IOException")
+    val COROUTINE_DISPATCHER = ClassName("kotlinx.coroutines", "CoroutineDispatcher")
+    val DISPATCHERS = ClassName("kotlinx.coroutines", "Dispatchers")
 }
 
 /**
@@ -612,7 +610,7 @@ class KotlinCodeGenerator(
             typeBuilder
                     .addSuperinterface(Struct::class)
                     .addFunction(FunSpec.builder("write")
-                            .addModifiers(KModifier.OVERRIDE)
+                            .addModifiers(KModifier.SUSPEND, KModifier.OVERRIDE)
                             .addParameter("protocol", Protocol::class)
                             .addStatement("%L.write(protocol, this)", nameAllocator.get(Tags.ADAPTER))
                             .build())
@@ -754,7 +752,7 @@ class KotlinCodeGenerator(
             typeBuilder
                     .addSuperinterface(Struct::class)
                     .addFunction(FunSpec.builder("write")
-                            .addModifiers(KModifier.OVERRIDE)
+                            .addModifiers(KModifier.SUSPEND, KModifier.OVERRIDE)
                             .addParameter("protocol", Protocol::class)
                             .addStatement("%L.write(protocol, this)", nameAllocator.get(Tags.ADAPTER))
                             .build())
@@ -1020,7 +1018,7 @@ class KotlinCodeGenerator(
                 .addSuperinterface(adapterInterfaceName)
 
         val reader = FunSpec.builder("read").apply {
-            addModifiers(KModifier.OVERRIDE)
+            addModifiers(KModifier.SUSPEND, KModifier.OVERRIDE)
             returns(struct.typeName)
             addParameter("protocol", Protocol::class)
 
@@ -1030,7 +1028,7 @@ class KotlinCodeGenerator(
         }
 
         val writer = FunSpec.builder("write")
-                .addModifiers(KModifier.OVERRIDE)
+                .addModifiers(KModifier.SUSPEND, KModifier.OVERRIDE)
                 .addParameter("protocol", Protocol::class)
                 .addParameter("struct", struct.typeName)
 
@@ -1172,7 +1170,7 @@ class KotlinCodeGenerator(
 
         if (builderType != null) {
             adapter.addFunction(FunSpec.builder("read")
-                    .addModifiers(KModifier.OVERRIDE)
+                    .addModifiers(KModifier.SUSPEND, KModifier.OVERRIDE)
                     .addParameter("protocol", Protocol::class)
                     .addStatement("return read(protocol, %T())", builderType)
                     .build())
@@ -1203,7 +1201,7 @@ class KotlinCodeGenerator(
                 .addSuperinterface(adapterInterfaceName)
 
         val reader = FunSpec.builder("read").apply {
-            addModifiers(KModifier.OVERRIDE)
+            addModifiers(KModifier.SUSPEND, KModifier.OVERRIDE)
             returns(struct.typeName)
             addParameter("protocol", Protocol::class)
 
@@ -1213,7 +1211,7 @@ class KotlinCodeGenerator(
         }
 
         val writer = FunSpec.builder("write")
-                .addModifiers(KModifier.OVERRIDE)
+                .addModifiers(KModifier.SUSPEND, KModifier.OVERRIDE)
                 .addParameter("protocol", Protocol::class)
                 .addParameter("struct", struct.typeName)
 
@@ -1314,7 +1312,7 @@ class KotlinCodeGenerator(
 
         if (builderType != null) {
             adapter.addFunction(FunSpec.builder("read")
-                    .addModifiers(KModifier.OVERRIDE)
+                    .addModifiers(KModifier.SUSPEND, KModifier.OVERRIDE)
                     .addParameter("protocol", Protocol::class)
                     .addStatement("return read(protocol, %T())", builderType)
                     .build())
@@ -1999,7 +1997,7 @@ class KotlinCodeGenerator(
         for (method in serviceType.methods) {
             val name = allocator.get(method)
             val funSpec = FunSpec.builder(name).apply {
-                addModifiers(KModifier.ABSTRACT)
+                addModifiers(KModifier.SUSPEND, KModifier.ABSTRACT)
 
                 if (method.hasJavadoc) addKdoc("%L", method.documentation)
                 if (method.isDeprecated) addAnnotation(makeDeprecated())
@@ -2047,18 +2045,18 @@ class KotlinCodeGenerator(
 
             primaryConstructor(FunSpec.constructorBuilder()
                     .addParameter("protocol", Protocol::class)
-                    .addParameter("listener", AsyncClientBase.Listener::class)
+                    .addParameter("dispatcher", ClassNames.COROUTINE_DISPATCHER)
                     .build())
 
             addSuperclassConstructorParameter("protocol", Protocol::class)
-            addSuperclassConstructorParameter("listener", AsyncClientBase.Listener::class)
+            addSuperclassConstructorParameter("dispatcher", ClassNames.COROUTINE_DISPATCHER)
         }
 
         for ((index, interfaceFun) in serviceInterface.funSpecs.withIndex()) {
             val method = serviceType.methods[index]
             val call = buildCallType(schema, method)
             val spec = FunSpec.builder(interfaceFun.name).apply {
-                addModifiers(KModifier.OVERRIDE)
+                addModifiers(KModifier.SUSPEND, KModifier.OVERRIDE)
                 for (param in interfaceFun.parameters) {
                     addParameter(param)
                 }
@@ -2310,46 +2308,20 @@ class KotlinCodeGenerator(
 
             primaryConstructor(FunSpec.constructorBuilder()
                     .addParameter("protocol", Protocol::class)
-                    .addParameter("listener", AsyncClientBase.Listener::class)
+                    .addParameter(
+                        ParameterSpec.builder("dispatcher", ClassNames.COROUTINE_DISPATCHER)
+                            .defaultValue("%T.Default", ClassNames.DISPATCHERS)
+                            .build())
                     .build())
 
             addSuperclassConstructorParameter("protocol", Protocol::class)
-            addSuperclassConstructorParameter("listener", AsyncClientBase.Listener::class)
+            addSuperclassConstructorParameter("dispatcher", ClassNames.COROUTINE_DISPATCHER)
         }
-
-        // suspendCoroutine is obviously not a class, but until kotlinpoet supports
-        // importing fully-qualified fun names, we can pun and use a ClassName.
-        val suspendCoroFn = MemberName("kotlin.coroutines", "suspendCoroutine")
-        val coroResultClass = ClassNames.RESULT
 
         for ((index, interfaceFun) in serviceInterface.funSpecs.withIndex()) {
             val method = serviceType.methods[index]
             val call = buildCallType(schema, method)
             val resultType = interfaceFun.returnType ?: UNIT
-            val callbackResultType = if (method.oneWay) UNIT else resultType
-            val callbackType = ServiceMethodCallback::class.asTypeName().parameterizedBy(resultType)
-            val callback = TypeSpec.anonymousClassBuilder()
-                    .addSuperinterface(callbackType)
-                    .addFunction(FunSpec.builder("onSuccess")
-                            .addModifiers(KModifier.OVERRIDE)
-                            .addParameter("result", callbackResultType)
-                            .apply {
-                                // oneway calls don't have results.  We deal with this by making
-                                // the callback accept a Unit for oneway functions; it's odd but
-                                // acceptable as an implementation detail.
-                                if (method.oneWay) {
-                                    addStatement("cont.resumeWith(%T.success(Unit))", coroResultClass)
-                                } else {
-                                    addStatement("cont.resumeWith(%T.success(%N))", coroResultClass, "result")
-                                }
-                            }
-                            .build())
-                    .addFunction(FunSpec.builder("onError")
-                            .addModifiers(KModifier.OVERRIDE)
-                            .addParameter("error", ClassNames.THROWABLE)
-                            .addStatement("cont.resumeWith(%T.failure(%N))", coroResultClass, "error")
-                            .build())
-                    .build()
 
             val spec = FunSpec.builder(interfaceFun.name).apply {
                 addModifiers(KModifier.SUSPEND, KModifier.OVERRIDE)
@@ -2359,16 +2331,26 @@ class KotlinCodeGenerator(
                     addParameter(param)
                 }
 
-                addCode("return %M·{·cont·->⇥\n", suspendCoroFn)
+                addCode("«")
 
-                addCode("«this.enqueue(%N(", call)
-                for (param in interfaceFun.parameters) {
-                    addCode("%N, ", param.name)
+                if (resultType != UNIT) {
+                    addCode("return ")
                 }
 
-                addCode("%L))»\n", callback)
+                addCode("this.enqueue(%N(", call)
+                for ((ix, param) in interfaceFun.parameters.withIndex()) {
+                    if (ix > 0) {
+                        addCode(", ")
+                    }
+                    addCode("%N", param.name)
+                }
+                addCode("))")
 
-                addCode("⇤}\n")
+                if (resultType != UNIT) {
+                    addCode(" as %T", resultType)
+                }
+
+                addCode("»")
             }
             type.addType(call)
             type.addFunction(spec.build())
@@ -2384,9 +2366,6 @@ class KotlinCodeGenerator(
         val hasResult = resultType != UNIT
         val messageType = if (method.oneWay) "ONEWAY" else "CALL"
         val nameAllocator = nameAllocators[method]
-        val callbackTypeName = ServiceMethodCallback::class
-                .asTypeName()
-                .parameterizedBy(resultType)
         val superclassTypeName = MethodCall::class
                 .asTypeName()
                 .parameterizedBy(resultType)
@@ -2398,7 +2377,6 @@ class KotlinCodeGenerator(
 
             addSuperclassConstructorParameter("%S", method.name)
             addSuperclassConstructorParameter("%T.%L", TMessageType::class, messageType)
-            addSuperclassConstructorParameter("%N", nameAllocator.get(Tags.CALLBACK))
 
             // Add ctor
             val ctor = FunSpec.constructorBuilder()
@@ -2431,15 +2409,11 @@ class KotlinCodeGenerator(
                         .build())
             }
 
-            ctor.addParameter(nameAllocator.get(Tags.CALLBACK), callbackTypeName)
             primaryConstructor(ctor.build())
 
             // Add send method
             val send = FunSpec.builder(nameAllocator.get(Tags.SEND))
-                    .addModifiers(KModifier.OVERRIDE)
-                    .addAnnotation(AnnotationSpec.builder(ClassNames.THROWS)
-                            .addMember("%T::class", ClassNames.IO_EXCEPTION)
-                            .build())
+                    .addModifiers(KModifier.SUSPEND, KModifier.OVERRIDE)
                     .addParameter("protocol", Protocol::class)
                     .addStatement("protocol.writeStructBegin(%S)", "args")
 
@@ -2474,12 +2448,9 @@ class KotlinCodeGenerator(
 
             // Add receive method
             val recv = FunSpec.builder(nameAllocator.get(Tags.RECEIVE))
-                    .addModifiers(KModifier.OVERRIDE)
+                    .addModifiers(KModifier.SUSPEND, KModifier.OVERRIDE)
                     .addParameter("protocol", Protocol::class)
                     .addParameter("metadata", MessageMetadata::class)
-                    .addAnnotation(AnnotationSpec.builder(ClassNames.THROWS)
-                            .addMember("%T::class", ClassNames.EXCEPTION)
-                            .build())
 
             val maybeResultType = resultType.copy(nullable = true)
             val resultName = nameAllocator.get(Tags.RESULT)
