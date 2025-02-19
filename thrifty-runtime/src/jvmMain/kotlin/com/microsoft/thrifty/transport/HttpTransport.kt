@@ -41,11 +41,13 @@
 package com.microsoft.thrifty.transport
 
 
+import okio.IOException
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import okio.ProtocolException
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * HTTP implementation of the TTransport interface. Used for working with a
@@ -167,8 +169,10 @@ actual open class HttpTransport actual constructor(url: String) : Transport {
         currentState.close()
     }
 
+    @Throws(CancellationException::class, IllegalArgumentException::class, IOException::class)
     override suspend fun read(buffer: ByteArray, offset: Int, count: Int): Int = currentState.read(buffer, offset, count)
 
+    @Throws(CancellationException::class, IllegalArgumentException::class, IOException::class)
     override suspend fun write(buffer: ByteArray, offset: Int, count: Int) {
         // this mirrors the original behaviour, though it is not very elegant.
         // we don't know when the user is done reading, so when they start writing again,
@@ -180,6 +184,7 @@ actual open class HttpTransport actual constructor(url: String) : Transport {
         currentState.write(buffer, offset, count)
     }
 
+    @Throws(CancellationException::class, IllegalStateException::class, IOException::class)
     override suspend fun flush() {
         currentState.flush()
     }

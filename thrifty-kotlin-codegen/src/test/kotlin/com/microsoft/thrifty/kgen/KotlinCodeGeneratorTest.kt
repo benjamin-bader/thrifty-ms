@@ -435,7 +435,7 @@ class KotlinCodeGeneratorTest {
             |
             |public class SvcClient(
             |  protocol: Protocol,
-            |  dispatcher: CoroutineDispatcher = Dispatchers.Default,
+            |  dispatcher: CoroutineDispatcher = Dispatchers.IO,
             |) : AsyncClientBase(protocol, dispatcher), Svc {
             |  public override suspend fun doSomething(foo: Int): Int = this.enqueue(DoSomethingCall(foo)) as Int
             |

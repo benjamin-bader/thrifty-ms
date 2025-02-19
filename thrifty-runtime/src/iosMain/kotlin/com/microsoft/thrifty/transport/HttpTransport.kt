@@ -20,27 +20,29 @@
  */
 package com.microsoft.thrifty.transport
 
+import kotlinx.atomicfu.atomic
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.convert
 import kotlinx.cinterop.usePinned
+import kotlinx.coroutines.CancellableContinuation
+import kotlinx.coroutines.suspendCancellableCoroutine
 import okio.IOException
-import platform.Foundation.NSCondition
-import platform.Foundation.NSError
 import platform.Foundation.NSMakeRange
 import platform.Foundation.NSMutableData
 import platform.Foundation.NSMutableURLRequest
 import platform.Foundation.NSTimeInterval
 import platform.Foundation.NSURL
-import platform.Foundation.NSURLResponse
 import platform.Foundation.NSURLSession
-import platform.Foundation.NSURLSessionTask
 import platform.Foundation.appendBytes
 import platform.Foundation.dataTaskWithRequest
 import platform.Foundation.getBytes
 import platform.Foundation.setHTTPBody
 import platform.Foundation.setHTTPMethod
 import platform.Foundation.setValue
+import kotlin.coroutines.cancellation.CancellationException
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 @OptIn(ExperimentalForeignApi::class)
 actual class HttpTransport actual constructor(url: String) : Transport {
@@ -59,21 +61,13 @@ actual class HttpTransport actual constructor(url: String) : Transport {
     private var data: NSMutableData = NSMutableData()
     private var consumed = 0UL
 
-    // This is used to signal when the response has been received.
-    private val condition = NSCondition()
-    private var response: NSURLResponse? = null
-    private var responseErr: NSError? = null
-    private var task: NSURLSessionTask? = null
+    private val pendingContinuation = atomic<CancellableContinuation<Unit>?>(null)
 
     override fun close() {
-        condition.locked {
-            if (task != null) {
-                task!!.cancel()
-                task = null
-            }
-        }
+        pendingContinuation.getAndSet(null)?.cancel()
     }
 
+    @Throws(CancellationException::class, IllegalArgumentException::class, IOException::class)
     override suspend fun read(buffer: ByteArray, offset: Int, count: Int): Int {
         require(!writing) { "Cannot read before calling flush()" }
         require(count > 0) { "Cannot read a negative or zero number of bytes" }
@@ -81,11 +75,6 @@ actual class HttpTransport actual constructor(url: String) : Transport {
         require(offset < buffer.size) { "Offset is outside of buffer bounds" }
         require(offset + count <= buffer.size) { "Not enough room in buffer for requested read" }
 
-        condition.waitFor { response != null || responseErr != null }
-
-        if (responseErr != null) {
-            throw IOException("Response error: $responseErr")
-        }
 
         val remaining = data.length() - consumed
         val toCopy = minOf(remaining, count.convert())
@@ -102,6 +91,7 @@ actual class HttpTransport actual constructor(url: String) : Transport {
         return toCopy.convert()
     }
 
+    @Throws(CancellationException::class, IllegalArgumentException::class, IOException::class)
     override suspend fun write(buffer: ByteArray, offset: Int, count: Int) {
         require(offset >= 0) { "offset < 0: $offset" }
         require(count >= 0) { "count < 0: $count" }
@@ -110,18 +100,11 @@ actual class HttpTransport actual constructor(url: String) : Transport {
         if (!writing) {
             // Maybe there's still data in the buffer to be read,
             // but if our user is writing, then let's just go with it.
-            condition.locked {
-                if (task != null) {
-                    task!!.cancel()
-                    task = null
-                }
+            pendingContinuation.getAndSet(null)?.cancel()
 
-                data.setLength(0U)
-                response = null
-                responseErr = null
-                consumed = 0U
-                writing = true
-            }
+            data.setLength(0U)
+            consumed = 0U
+            writing = true
         }
 
         buffer.usePinned { pinned ->
@@ -129,9 +112,9 @@ actual class HttpTransport actual constructor(url: String) : Transport {
         }
     }
 
+    @Throws(CancellationException::class, IllegalStateException::class, IOException::class)
     override suspend fun flush() {
-        require(writing) { "Cannot flush after calling read()" }
-        writing = false
+        check(writing) { "Cannot flush after calling read()" }
 
         val urlRequest = NSMutableURLRequest(url)
         urlRequest.setHTTPMethod("POST")
@@ -150,27 +133,29 @@ actual class HttpTransport actual constructor(url: String) : Transport {
         urlRequest.setHTTPBody(data)
 
         val session = NSURLSession.sharedSession()
-        val task = session.dataTaskWithRequest(urlRequest) { data, response, error ->
-            if (data != null) {
-                this.data = data.mutableCopy() as NSMutableData
-            } else {
-                this.data.setLength(0U)
+
+        suspendCancellableCoroutine { cont ->
+            val task = session.dataTaskWithRequest(urlRequest) { data, _, err ->
+                if (data != null) {
+                    this.data = data.mutableCopy() as NSMutableData
+                } else {
+                    this.data.setLength(0U)
+                }
+
+                this.consumed = 0U
+                this.writing = false
+
+                if (err != null) {
+                    cont.resumeWithException(IOException("Request failed: $err"))
+                } else {
+                    cont.resume(Unit)
+                }
             }
 
-            consumed = 0U
+            cont.invokeOnCancellation { task.cancel() }
 
-            condition.locked {
-                this.response = response
-                this.responseErr = error
-                condition.signal()
-            }
+            task.resume()
         }
-
-        condition.locked {
-            this.task = task
-        }
-
-        task.resume()
     }
 
     actual fun setConnectTimeout(timeout: Int) {
@@ -195,21 +180,4 @@ fun millisToTimeInterval(millis: Long): NSTimeInterval {
     // NSTimeInterval is a double-precision floating point number representing
     // seconds.  So to go from millis to NSTimeInterval, we divide by 1000.0.
     return millis / 1000.0
-}
-
-inline fun NSCondition.locked(block: () -> Unit) {
-    lock()
-    try {
-        block()
-    } finally {
-        unlock()
-    }
-}
-
-inline fun NSCondition.waitFor(crossinline condition: () -> Boolean) {
-    locked {
-        while (!condition()) {
-            wait()
-        }
-    }
 }

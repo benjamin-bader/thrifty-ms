@@ -24,10 +24,10 @@ import com.microsoft.thrifty.TType
 import com.microsoft.thrifty.transport.BufferTransport
 import com.microsoft.thrifty.util.ProtocolUtil.skip
 import io.kotest.assertions.fail
-import io.kotest.common.runBlocking
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.contain
+import kotlinx.coroutines.test.runTest
 import okio.Buffer
 import okio.ByteString
 import okio.ByteString.Companion.decodeHex
@@ -38,7 +38,7 @@ import kotlin.test.Test
 
 class BinaryProtocolTest {
     @Test
-    fun readString() = runBlocking {
+    fun readString() = runTest {
         val buffer = Buffer()
         buffer.writeInt(3)
         buffer.writeUtf8("foo")
@@ -47,7 +47,7 @@ class BinaryProtocolTest {
     }
 
     @Test
-    fun readStringGreaterThanLimit() = runBlocking {
+    fun readStringGreaterThanLimit() = runTest {
         val buffer = Buffer()
         buffer.writeInt(13)
         buffer.writeUtf8("foobarbazquux")
@@ -61,7 +61,7 @@ class BinaryProtocolTest {
     }
 
     @Test
-    fun readBinary() = runBlocking {
+    fun readBinary() = runTest {
         val buffer = Buffer()
         buffer.writeInt(4)
         buffer.writeUtf8("abcd")
@@ -70,7 +70,7 @@ class BinaryProtocolTest {
     }
 
     @Test
-    fun readBinaryGreaterThanLimit() = runBlocking {
+    fun readBinaryGreaterThanLimit() = runTest {
         val buffer = Buffer()
         buffer.writeInt(6)
         buffer.writeUtf8("kaboom")
@@ -84,7 +84,7 @@ class BinaryProtocolTest {
     }
 
     @Test
-    fun writeByte() = runBlocking {
+    fun writeByte() = runTest {
         val buffer = Buffer()
         val proto = BinaryProtocol(BufferTransport(buffer))
         proto.writeByte(127.toByte())
@@ -92,7 +92,7 @@ class BinaryProtocolTest {
     }
 
     @Test
-    fun writeI16() = runBlocking {
+    fun writeI16() = runTest {
         val buffer = Buffer()
         val proto = BinaryProtocol(BufferTransport(buffer))
         proto.writeI16(Short.MAX_VALUE)
@@ -105,7 +105,7 @@ class BinaryProtocolTest {
     }
 
     @Test
-    fun writeI32() = runBlocking {
+    fun writeI32() = runTest {
         val buffer = Buffer()
         val proto = BinaryProtocol(BufferTransport(buffer))
         proto.writeI32(-0xf0ff01)
@@ -113,7 +113,7 @@ class BinaryProtocolTest {
     }
 
     @Test
-    fun writeI64() = runBlocking {
+    fun writeI64() = runTest {
         val buffer = Buffer()
         val proto = BinaryProtocol(BufferTransport(buffer))
         proto.writeI64(0x12345678)
@@ -122,7 +122,7 @@ class BinaryProtocolTest {
     }
 
     @Test
-    fun writeDouble() = runBlocking {
+    fun writeDouble() = runTest {
         val buffer = Buffer()
         val proto = BinaryProtocol(BufferTransport(buffer))
 
@@ -133,7 +133,7 @@ class BinaryProtocolTest {
     }
 
     @Test
-    fun writeString() = runBlocking {
+    fun writeString() = runTest {
         val buffer = Buffer()
         val proto = BinaryProtocol(BufferTransport(buffer))
         proto.writeString("here is a string")
@@ -142,7 +142,7 @@ class BinaryProtocolTest {
     }
 
     @Test
-    fun adapterTest() = runBlocking {
+    fun adapterTest() = runTest {
         // This test case comes from actual data, and is intended
         // to ensure in particular that readers don't grab more data than
         // they are supposed to.

@@ -20,14 +20,20 @@
  */
 package com.microsoft.thrifty.transport
 
+import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.util.concurrent.Executors
 import javax.net.SocketFactory
 import javax.net.ssl.SSLSocketFactory
+import kotlin.coroutines.cancellation.CancellationException
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
+@Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING")
 actual class SocketTransport actual constructor(
         builder: Builder
 ) : Transport {
@@ -36,6 +42,7 @@ actual class SocketTransport actual constructor(
     private val readTimeout = builder.readTimeout
     private val connectTimeout = builder.connectTimeout
     private val socketFactory = builder.socketFactory ?: builder.getDefaultSocketFactory()
+    private val executor = Executors.newSingleThreadExecutor()
 
     private var socket: Socket? = null
     private var inputStream: InputStream? = null
@@ -97,19 +104,29 @@ actual class SocketTransport actual constructor(
             return s != null && s.isConnected && !s.isClosed
         }
 
-    override suspend fun read(buffer: ByteArray, offset: Int, count: Int): Int {
-        return inputStream!!.read(buffer, offset, count)
+    @Throws(CancellationException::class, IllegalArgumentException::class, IOException::class)
+    override suspend fun read(buffer: ByteArray, offset: Int, count: Int): Int = suspendAndSubmit {
+        require(offset >= 0) { "offset < 0: $offset" }
+        require(count >= 0) { "count < 0: $count" }
+        require(offset + count <= buffer.size) { "offset + count > buffer.size: $offset + $count > ${buffer.size}" }
+        inputStream!!.read(buffer, offset, count)
     }
 
-    override suspend fun write(buffer: ByteArray, offset: Int, count: Int) {
+    @Throws(CancellationException::class, IllegalArgumentException::class, IOException::class)
+    override suspend fun write(buffer: ByteArray, offset: Int, count: Int) = suspendAndSubmit {
+        require(offset >= 0) { "offset < 0: $offset" }
+        require(count >= 0) { "count < 0: $count" }
+        require(offset + count <= buffer.size) { "offset + count > buffer.size: $offset + $count > ${buffer.size}" }
         outputStream!!.write(buffer, offset, count)
     }
 
-    override suspend fun flush() {
+    @Throws(CancellationException::class, IllegalStateException::class, IOException::class)
+    override suspend fun flush() = suspendAndSubmit {
         outputStream!!.flush()
     }
 
-    actual suspend fun connect() {
+    @Throws(CancellationException::class, IOException::class)
+    actual suspend fun connect() = suspendAndSubmit {
         if (socket == null) {
             socket = socketFactory.createSocket()
         }
@@ -143,6 +160,19 @@ actual class SocketTransport actual constructor(
             try {
                 socket.close()
             } catch (ignored: IOException) {
+            }
+        }
+        executor.shutdown()
+    }
+
+    private suspend inline fun <T> suspendAndSubmit(crossinline block: () -> T): T {
+        return suspendCancellableCoroutine { cont ->
+            executor.submit {
+                try {
+                    cont.resume(block())
+                } catch (e: Throwable) {
+                    cont.resumeWithException(e)
+                }
             }
         }
     }

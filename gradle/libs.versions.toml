@@ -1,5 +1,6 @@
 [versions]
 atomicfu = "0.20.2"
+coro = "1.7.1"
 dokka = "1.7.20"
 junit = "5.10.0"
 kotest = "5.5.4"
@@ -19,7 +20,7 @@ kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib-jdk8", version.re
 kotlin-stdlibCommon = { module = "org.jetbrains.kotlin:kotlin-stdlib-common", version.ref = "kotlin" }
 kotlinx-atomicfu-common = { module = "org.jetbrains.kotlinx:atomicfu", version.ref = "atomicfu" }
 kotlinx-atomicfu-jvm = { module = "org.jetbrains.kotlinx:atomicfu-jvm", version.ref = "atomicfu" }
-kotlinx-coroutines = "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4"
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coro" }
 kotlinPoet = "com.squareup:kotlinpoet:1.12.0"
 mavenPublishPlugin = "com.vanniktech:gradle-maven-publish-plugin:0.25.3"
 okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
@@ -35,6 +36,7 @@ kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", v
 kotlin-test-annotations-common = { module = "org.jetbrains.kotlin:kotlin-test-annotations-common", version.ref = "kotlin" }
 kotlin-test-common = { module = "org.jetbrains.kotlin:kotlin-test-common", version.ref = "kotlin" }
 kotlin-test-junit5 = { module = "org.jetbrains.kotlin:kotlin-test-junit5", version.ref = "kotlin" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coro" }
 
 [bundles]
 kotlin = [ "kotlin-stdlib", "kotlin-reflect" ]

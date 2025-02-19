@@ -20,6 +20,9 @@
  */
 package com.microsoft.thrifty.transport
 
+import okio.IOException
+import kotlin.coroutines.cancellation.CancellationException
+
 expect class SocketTransport internal constructor(
     builder: Builder
 ) : Transport {
@@ -42,5 +45,6 @@ expect class SocketTransport internal constructor(
         fun build(): SocketTransport
     }
 
+    @Throws(CancellationException::class, IOException::class)
     suspend fun connect()
 }

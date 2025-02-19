@@ -28,6 +28,9 @@ import kotlinx.cinterop.Pinned
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.convert
 import kotlinx.cinterop.usePinned
+import kotlinx.coroutines.CancellableContinuation
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeout
 import okio.Closeable
 import okio.IOException
 import platform.Network.nw_connection_cancel
@@ -61,21 +64,14 @@ import platform.Network.nw_tcp_create_options
 import platform.Network.nw_tcp_options_set_connection_timeout
 import platform.Network.nw_tcp_options_set_no_delay
 import platform.Network.nw_tls_create_options
-import platform.darwin.DISPATCH_TIME_FOREVER
-import platform.darwin.DISPATCH_TIME_NOW
 import platform.darwin.dispatch_data_apply
 import platform.darwin.dispatch_data_create
 import platform.darwin.dispatch_get_global_queue
-import platform.darwin.dispatch_semaphore_create
-import platform.darwin.dispatch_semaphore_signal
-import platform.darwin.dispatch_semaphore_t
-import platform.darwin.dispatch_semaphore_wait
-import platform.darwin.dispatch_time
-import platform.darwin.dispatch_time_t
 import platform.posix.QOS_CLASS_DEFAULT
 import platform.posix.intptr_t
 import platform.posix.memcpy
-import kotlin.time.Duration.Companion.milliseconds
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 @OptIn(ExperimentalForeignApi::class)
 class NwSocket(
@@ -89,7 +85,7 @@ class NwSocket(
         nw_connection_set_state_changed_handler(conn, this::handleStateChange)
     }
 
-    fun read(buffer: ByteArray, offset: Int = 0, count: Int = buffer.size): Int {
+    suspend fun read(buffer: ByteArray, offset: Int = 0, count: Int = buffer.size): Int {
         require(offset >= 0)
         require(count >= 0)
         require(offset + count <= buffer.size)
@@ -112,40 +108,30 @@ class NwSocket(
         }
     }
 
-    @Throws(IOException::class)
-    private fun readOneChunk(pinned: Pinned<ByteArray>, offset: Int, count: Int): Int {
-        val sem = dispatch_semaphore_create(0)
-        var networkError: nw_error_t = null
-        var numRead = 0
+    private suspend fun readOneChunk(pinned: Pinned<ByteArray>, offset: Int, count: Int): Int {
+        return suspendWithTimeout(readWriteTimeoutMillis) { continuation ->
+            nw_connection_receive(
+                connection = conn,
+                minimum_incomplete_length = 0.convert(),
+                maximum_length = count.convert()
+            ) { contents, _, _, error ->
+                var numRead = 0
+                dispatch_data_apply(contents) { _, _, dataPtr, size ->
+                    memcpy(pinned.addressOf(offset + numRead), dataPtr, size)
+                    numRead += size.toInt()
+                    true // keep going
+                }
 
-        nw_connection_receive(
-            connection = conn,
-            minimum_incomplete_length = 0.convert(),
-            maximum_length = count.convert()
-        ) { contents, _, _, error ->
-            dispatch_data_apply(contents) { _, _, dataPtr, size ->
-                memcpy(pinned.addressOf(offset + numRead), dataPtr, size)
-                numRead += size.toInt()
-                true // keep going
+                if (error != null) {
+                    continuation.resumeWith(Result.failure(error.toException()))
+                } else {
+                    continuation.resumeWith(Result.success(numRead))
+                }
             }
-
-            networkError = error
-
-            dispatch_semaphore_signal(sem)
         }
-
-        if (!sem.waitWithTimeout(readWriteTimeoutMillis)) {
-            val e = IOException("Timed out waiting for read")
-            println(e.stackTraceToString())
-            throw e
-        }
-
-        networkError?.throwError()
-
-        return numRead
     }
 
-    fun write(buffer: ByteArray, offset: Int = 0, count: Int = buffer.size) {
+    suspend fun write(buffer: ByteArray, offset: Int = 0, count: Int = buffer.size) {
         require(offset >= 0)
         require(count >= 0)
         require(offset + count <= buffer.size)
@@ -153,35 +139,31 @@ class NwSocket(
         check(isConnected.value) { "Socket not connected" }
 
         buffer.usePinned { pinned ->
-            val sem = dispatch_semaphore_create(0)
             val toWrite = dispatch_data_create(
                 buffer = pinned.addressOf(offset),
                 size = count.convert(),
                 queue = dispatch_get_target_default_queue(), // Our own method, see KT62102Workaround
-                destructor = ::noopDispatchBlock
+                destructor = null,
             )
 
-            var err: nw_error_t = null
-            nw_connection_send_with_default_context(
-                connection = conn,
-                content = toWrite,
-                is_complete = false
-            ) { networkError ->
-                err = networkError
-                dispatch_semaphore_signal(sem)
-            }
-
-            if (!sem.waitWithTimeout(readWriteTimeoutMillis)) {
-                throw IOException("Timed out waiting for write")
-            }
-
-            if (err != null) {
-                err.throwError()
+            suspendWithTimeout(readWriteTimeoutMillis) { continuation ->
+                nw_connection_send_with_default_context(
+                    connection = conn,
+                    content = toWrite,
+                    is_complete = false
+                ) { networkError ->
+                    val result = if (networkError != null) {
+                        Result.failure(networkError.toException())
+                    } else {
+                        Result.success(Unit)
+                    }
+                    continuation.resumeWith(result)
+                }
             }
         }
     }
 
-    fun flush() {
+    suspend fun flush() {
         // no-op?
     }
 
@@ -223,7 +205,7 @@ class NwSocket(
     companion object {
         private val INTPTR_ZERO = 0.convert<intptr_t>()
 
-        fun connect(
+        suspend fun connect(
             host: String,
             port: Int,
             enableTls: Boolean,
@@ -263,75 +245,44 @@ class NwSocket(
             val globalQueue = dispatch_get_global_queue(QOS_CLASS_DEFAULT.convert(), 0.convert())
             nw_connection_set_queue(connection, globalQueue)
 
-            val sem = dispatch_semaphore_create(0)
             val didConnect = atomic(false)
-            val connectionError = atomic<nw_error_t>(null)
 
-            nw_connection_set_state_changed_handler(connection) { state, error ->
-                if (error != null) {
-                    connectionError.value = error
+            suspendWithTimeout(connectTimeoutMillis) { continuation ->
+                nw_connection_set_state_changed_handler(connection) { state, error ->
+                    if (error != null) {
+                        continuation.resumeWithException(error.toException())
+                    }
+
+                    if (state == nw_connection_state_ready) {
+                        didConnect.value = true
+                    }
+
+                    if (state in setOf(nw_connection_state_ready, nw_connection_state_failed, nw_connection_state_cancelled)) {
+                        continuation.resume(Unit)
+                    }
                 }
 
-                if (state == nw_connection_state_ready) {
-                    didConnect.value = true
+                continuation.invokeOnCancellation {
+                    nw_connection_set_state_changed_handler(connection, null)
+                    nw_connection_cancel(connection)
                 }
 
-                if (state in setOf(nw_connection_state_ready, nw_connection_state_failed, nw_connection_state_cancelled)) {
-                    dispatch_semaphore_signal(sem)
-                }
-            }
-
-            nw_connection_start(connection)
-            val finishedInTime = sem.waitWithTimeout(connectTimeoutMillis)
-
-            if (connectionError.value != null) {
-                nw_connection_cancel(connection)
-                connectionError.value.throwError("Error connecting to $host:$port")
-            }
-
-            if (!finishedInTime) {
-                nw_connection_cancel(connection)
-                throw IOException("Timed out connecting to $host:$port")
+                nw_connection_start(connection)
             }
 
             if (didConnect.value) {
                 return NwSocket(connection, sendTimeoutMillis)
             }
 
+            nw_connection_cancel(connection) // Not sure if this is actually necessary?
             throw IOException("Failed to connect, but got no error")
         }
 
-        /**
-         * A function, usable as a [platform.darwin.dispatch_block_t], that does nothing.
-         *
-         * When used with [dispatch_data_create], this block causes the data
-         * *not* to be copied.  This is what we want, since we're using semaphores
-         * to wait for write completion, and we can guarantee that our memory
-         * outlives the dispatch_data_t that wraps it.
-         */
-        private fun noopDispatchBlock() {}
-
-        /**
-         * Returns true if the semaphore was signaled, false if it timed out.
-         */
-        private fun dispatch_semaphore_t.waitWithTimeout(timeoutMillis: Long): Boolean {
-            return dispatch_semaphore_wait(this, computeTimeout(timeoutMillis)) == INTPTR_ZERO
-        }
-
-        private fun computeTimeout(timeoutMillis: Long): dispatch_time_t {
-            return if (timeoutMillis == 0L) {
-                DISPATCH_TIME_FOREVER
-            } else {
-                val nanos = timeoutMillis.milliseconds.inWholeNanoseconds
-                dispatch_time(DISPATCH_TIME_NOW, nanos)
-            }
-        }
-
-        private fun nw_error_t.throwError(message: String? = null): Nothing {
+        private fun nw_error_t.toException(message: String? = null): IOException {
             val domain = nw_error_get_error_domain(this)
             val code = nw_error_get_error_code(this)
             val errorBody = message ?: "Network error"
-            throw IOException("$errorBody: $this (domain=${domain.name} code=$code)")
+            return IOException("$errorBody: $this (domain=${domain.name} code=$code)")
         }
 
         private val nw_error_domain_t.name: String
@@ -342,5 +293,15 @@ class NwSocket(
                 nw_error_domain_invalid -> "invalid"
                 else -> "$this"
             }
+
+        private suspend inline fun <T> suspendWithTimeout(timeoutMillis: Long, crossinline block: (CancellableContinuation<T>) -> Unit): T {
+            return if (timeoutMillis == 0L) {
+                suspendCancellableCoroutine(block)
+            } else {
+                withTimeout(timeoutMillis) {
+                    suspendCancellableCoroutine(block)
+                }
+            }
+        }
     }
 }

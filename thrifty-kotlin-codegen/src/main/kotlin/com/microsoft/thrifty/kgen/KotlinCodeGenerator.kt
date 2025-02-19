@@ -2306,11 +2306,13 @@ class KotlinCodeGenerator(
                 addModifiers(KModifier.OPEN)
             }
 
+            val ioDispatcher = MemberName("kotlinx.coroutines", "IO", isExtension = true)
+
             primaryConstructor(FunSpec.constructorBuilder()
                     .addParameter("protocol", Protocol::class)
                     .addParameter(
                         ParameterSpec.builder("dispatcher", ClassNames.COROUTINE_DISPATCHER)
-                            .defaultValue("%T.Default", ClassNames.DISPATCHERS)
+                            .defaultValue("%T.%M", ClassNames.DISPATCHERS, ioDispatcher)
                             .build())
                     .build())
 

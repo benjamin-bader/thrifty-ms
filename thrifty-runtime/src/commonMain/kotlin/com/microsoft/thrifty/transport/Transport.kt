@@ -20,17 +20,22 @@
  */
 package com.microsoft.thrifty.transport
 
+import kotlin.coroutines.cancellation.CancellationException
 import okio.Closeable
 import okio.IOException
 
 interface Transport : Closeable {
+    @Throws(CancellationException::class, IllegalArgumentException::class, IOException::class)
     suspend fun read(buffer: ByteArray, offset: Int, count: Int): Int
 
+    @Throws(CancellationException::class, IllegalArgumentException::class, IOException::class)
     suspend fun write(data: ByteArray) {
         write(data, 0, data.size)
     }
 
+    @Throws(CancellationException::class, IllegalArgumentException::class, IOException::class)
     suspend fun write(buffer: ByteArray, offset: Int, count: Int)
 
+    @Throws(CancellationException::class, IllegalStateException::class, IOException::class)
     suspend fun flush()
 }

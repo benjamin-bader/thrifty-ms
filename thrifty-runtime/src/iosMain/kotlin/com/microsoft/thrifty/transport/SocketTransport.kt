@@ -22,6 +22,7 @@ package com.microsoft.thrifty.transport
 
 import okio.IOException
 import platform.Network.nw_connection_t
+import kotlin.coroutines.cancellation.CancellationException
 
 actual class SocketTransport actual constructor(
     builder: Builder,
@@ -93,13 +94,19 @@ actual class SocketTransport actual constructor(
         socket?.close()
     }
 
+    @Throws(CancellationException::class, IOException::class)
     actual suspend fun connect() {
-        socket = NwSocket.connect(
-            host = host,
-            port = port,
-            enableTls = tls,
-            sendTimeoutMillis = readTimeout,
-            connectTimeoutMillis = connectTimeout
-        )
+        try {
+            socket = NwSocket.connect(
+                host = host,
+                port = port,
+                enableTls = tls,
+                sendTimeoutMillis = readTimeout,
+                connectTimeoutMillis = connectTimeout
+            )
+        } catch (e: IllegalArgumentException) {
+            // Why?  Because KMM, that's why.
+            throw IOException(e.message, e)
+        }
     }
 }
